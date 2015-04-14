@@ -5,21 +5,145 @@ output:
     keep_md: true
 ---
 
+This data comes from a personal activity monitoring device, consisting of the number of steps taken by an individual during the months of October and November, 2012, at 5 minutes intervals. 
 
 ## Loading and preprocessing the data
 
 
 
+   
+## get data from files
+The following code chunk loads the activity data into an R dataframe.  
+
+```{r getData, echo = TRUE}
+zipfile <- "activity.zip"
+unzip(zipfile)
+file <- list.files(pattern = ".csv")
+activityData <- read.csv(file, na.strings = "NA")
+```
+
 ## What is mean total number of steps taken per day?
 
+ The following code produces a plot giving the days according to the number of steps taken that day.
 
+```{r sumSteps, echo = TRUE}
+sumSteps <- tapply(activityData$steps, activityData$date, sum, na.rm=T)
+NAS <- sum(is.na(tapply(activityData$steps, activityData$date, sum)))
+
+hist(sumSteps, col= "yellow", main = "Number of daily steps", 
+     xlab = "Number of steps", ylab = "Number of days")
+abline(v=mean(sumSteps),lty=2,lwd=2)
+abline(v=median(sumSteps), col="orange", lty=3, lwd=2)
+legend("topright", bty="n", lty=c(2,3), lwd=c(2,3), col = c("black", "orange"), 
+       legend = c("mean","median"))
+
+days     <- dim(sumSteps)
+days_U5t <- dim(subset(sumSteps, sumSteps<5000))
+days_0   <- dim(subset(sumSteps, sumSteps == 0))
+mean1     <- format(mean(sumSteps), digits = 4, big.mark=" ")
+median1   <- format(median(sumSteps), digits = 5, big.mark=" ")
+```
+
+
+According to the graph shown above, in `r days_U5t` of the `r days` days present in the dataset, the total number of daily steps taken by the subject was lower than 5000.  This figure includes `r days_0` days for which no data is given (for all other days the observations are complete, as NAS comes equal to days_0). The average daily number of steps in this dataset is `r mean1` steps, and the median is `r median1` steps. The later figures also include days for each no data is given (assumed as 0).  
+
+```{r stats, echo = TRUE}
+mean1   <- format(mean(subset(sumSteps, sumSteps != 0)), digits = 5, big.mark=" ")
+median1 <- format(median(subset(sumSteps, sumSteps != 0)), digits = 5, big.mark=" ")
+```
+
+If we ignore the days for which no data is given, the average number of daily steps climbs up to `r mean1`, and the median becomes `r median1` steps.  In this last case, the mean and the median are almost the same.
 
 ## What is the average daily activity pattern?
 
+The following plots the average daily activity pattern, i.e. the distribution of the number of steps taken throughout the day, in five minutes intervals.
+
+```{r intervalSteps, echo = TRUE}
+
+intervalSteps <- tapply(activityData$steps, activityData$interval, 
+                        mean, na.rm = TRUE)
+
+plot(x=unique(activityData$interval), y=intervalSteps, type="l", 
+     main = "Daily activity pattern",  xlab = "Hour HHmm", 
+     ylab ="Number of steps in 5 minutes")
+
+maxHour <- format(activityData$interval[which.max(intervalSteps)]/100, 
+                          decimal.mark=":")
+maxSteps <- format(intervalSteps[which.max(intervalSteps)], digits = 3)
+```
+
+The subject's daily pattern for walking shows that he runned a diurnal life during the two month's sample, with the majority of walking activity occurring between 6:00 and 20:00.
+
+The period with the largest walking activity is `r maxHour`, with an average number of `r maxSteps` steps.
 
 
 ## Imputing missing values
 
+```{r missing, echo = TRUE}
+dataNA <- is.na(activityData$steps)
+totalNA <- sum(dataNA)
+missing <- subset(activityData, dataNA)
+dateNA <- unique(missing$date)
+```
+The variable NAS, already computed in the second code chunk, gives the number of days with missing values (`r NAS` days). Indeed, there are `r totalNA` observations with missing values in this dataset. The days with missing values are `r dateNA`.
+
+The following code chunk copy the activity dataset to a new dataset and fills the missing data with the sample's 5-minute averages.
+
+
+```{r filling, echo = TRUE}
+filledData <- activityData
+for(j in dateNA) {
+        for(i in 1:288) {
+                filledData[filledData$date == j,]$steps[i] <- intervalSteps[i]
+                }
+}
+```        
+
+The following plots replicates the previous one with this new dataset (no missing data).
+
+```{r filledSteps, echo = TRUE}
+filledSteps <- tapply(filledData$steps, filledData$date, sum)
+
+hist(filledSteps, col= "cyan", main = "Number of daily steps", 
+     xlab = "Number of steps", ylab = "Number of days")
+abline(v=mean(filledSteps),lty=2,lwd=2)
+abline(v=median(filledSteps), col="orange", lty=3, lwd=2)
+legend("topright", bty="n", lty=c(2,3), lwd=c(2,3), col = c("black", "orange"), 
+       legend = c("mean","median"))
+
+mean2     <- format(mean(filledSteps), digits = 5, big.mark=" ")
+median2   <- format(median(filledSteps), digits = 5, big.mark=" ")
+```
+
+The average daily number of steps in this dataset is now `r mean2` steps, and the median is also `r median2` steps.  
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+The next code chunk classifies and segments weekdays from weekend days.
+
+```{r weekdays, echo = TRUE}
+filledData$dayOfWeek <- "weekday"
+filledData$day <- weekdays(as.POSIXct(filledData$date), abbreviate = T)
+filledData[filledData$day == "sáb",]$dayOfWeek <- "weekend"
+filledData[filledData$day == "dom",]$dayOfWeek <- "weekend"
+
+weekdayData <- filledData[filledData$dayOfWeek == "weekday",]
+weekendData  <- filledData[filledData$dayOfWeek == "weekend",]
+
+weekdaySteps <- tapply(weekdayData$steps, weekdayData$interval, mean)
+weekendSteps <- tapply(weekendData$steps, weekendData$interval, mean)
+```
+
+Finally, we can plot both time series to highlight any differences between activity patterns on weekdays and wekends.
+
+```{r weekdaysPlot, echo = TRUE}
+par(mfrow=c(2,1))
+plot(x=unique(activityData$interval), y=weekdaySteps, type="l", 
+     main = "Weekdays activity pattern",  xlab = "Hour HHmm", 
+     ylab ="Number of steps in 5 minutes")
+
+plot(x=unique(activityData$interval), y=weekendSteps, type="l", 
+     main = "Weekends activity pattern",  xlab = "Hour HHmm", 
+     ylab ="Number of steps in 5 minutes")
+```
